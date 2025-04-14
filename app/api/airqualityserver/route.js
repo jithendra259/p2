@@ -176,3 +176,33 @@ export const getPollutantValue = async (city, pollutant) => {
   const data = await getCityData(city);
   return data.pollutants[pollutant.toLowerCase()] ?? null;
 };
+
+import { NextResponse } from 'next/server';
+import { connectMongoDB } from '@/lib/mongodb';
+import { AQIStation } from '@/lib/aqiModel';
+
+export async function GET(request) {
+  try {
+    await connectMongoDB();
+    
+    const { searchParams } = new URL(request.url);
+    const city = searchParams.get('city');
+    
+    let query = {};
+    if (city) {
+      query = { 'city.name': { $regex: city, $options: 'i' } };
+    }
+
+    const stations = await AQIStation.find(query)
+      .sort({ 'fetched_at': -1 })
+      .limit(100);
+
+    return NextResponse.json({ success: true, data: stations });
+  } catch (error) {
+    console.error('Error fetching AQI data:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch AQI data' },
+      { status: 500 }
+    );
+  }
+}

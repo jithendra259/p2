@@ -83,7 +83,7 @@ const UserDropdown = memo(({ session, onSignOut }) => (
 ));
 UserDropdown.displayName = 'UserDropdown';
 
-export default function Header() {
+export default function Header({ onLocationUpdate }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [navbarOpen, setNavbarOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
@@ -131,7 +131,7 @@ export default function Header() {
       <nav className="bg-white border-gray-200 dark:bg-gray-900 mx-auto w-full border-b dark:border-gray-700 sticky top-0 z-50">
         <div className="flex flex-wrap items-center justify-between p-4">
 
-          <SearchBar />
+          <SearchBar onCitySelect={onLocationUpdate} />
 
           <div className="flex items-center md:order-2 space-x-3 md:space-x-0 rtl:space-x-reverse relative">
             <button

@@ -1,15 +1,20 @@
-import UserInfo from "@/components/UserInfo";
+'use client';
+
+import { useState } from 'react';
 import Header from "@/components/header";
 import AQIBoard from "@/components/aqiboard";
-import Ranking from "@/components/ranking";
 
 export default function Dashboard() {
-  return(
+  const [currentLocation, setCurrentLocation] = useState(null);
+
+  const handleLocationUpdate = (data) => {
+    setCurrentLocation(data);
+  };
+
+  return (
     <div className="container">
-      <Header/>
-      <AQIBoard/>
-      <Ranking/>
-      <UserInfo/>
+      <Header onLocationUpdate={handleLocationUpdate} />
+      <AQIBoard locationData={currentLocation} />
     </div>
-  )
+  );
 }

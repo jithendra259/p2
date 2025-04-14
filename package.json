@@ -13,13 +13,16 @@
     "bcryptjs": "^2.4.3",
     "eslint": "8.46.0",
     "eslint-config-next": "13.4.12",
-    "mongoose": "^7.4.1",
+    "mongodb": "^5.8.0",
+    "mongodb-client-encryption": "^2.9.0",
+    "mongoose": "^7.5.0",
     "next": "13.4.12",
     "next-auth": "^4.22.3",
     "postcss": "8.4.27",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-icons": "^5.5.0",
+    "recharts": "^2.15.2",
     "tailwindcss": "3.3.3"
   }
 }

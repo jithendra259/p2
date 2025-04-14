@@ -1,140 +1,103 @@
-import React, { useState, useRef, useEffect } from 'react';
-// Import the search and detailed fetch functions from your AQI library.
-import { searchAQI, getCityData } from '../lib/airQuality'; // Import search and city data functions
-import { setSelectedLocation, getSelectedLocation } from '../lib/locationStore'; // Import location store functions
+'use client';
+import { useState, useEffect } from 'react';
 
-export default function SearchBar({ onSelectCity }) {
-  const [searchQuery, setSearchQuery] = useState('');
+export default function SearchBar({ onCitySelect = () => {} }) {
+  const [cities, setCities] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const dropdownRef = useRef(null);
-  const debounceTimeout = useRef(null);
 
-  // Fetch search results based on the user's query.
-  const fetchSearchResults = async (query) => {
-    console.log('Fetching search results for:', query); // Log the query being fetched
-
-    if (!query) {
+  const searchCities = async (term) => {
+    if (!term) {
+      setCities([]);
       setSearchResults([]);
-      setShowDropdown(false);
       return;
     }
-
-    setLoading(true);
-    setError(null);
-
+    setIsLoading(true);
     try {
-      // Call the searchAQI function from the library.
-      const data = await searchAQI(query);
-      console.log('Fetched Data:', data); // Log the fetched data
-      if (data.status === 'ok') {
-        const validResults = data.data.filter(
-          (result) => result.aqi && result.aqi !== '-' && result.aqi !== null
-        );
-        console.log('Valid Results:', validResults); // Log valid results
-        setSearchResults(validResults);
-        setShowDropdown(validResults.length > 0);
-      } else {
-        setError('Error fetching search results');
-      }
-    } catch (err) {
-      setError('Network error. Please try again.');
-    }
-    setLoading(false);
-  };
-
-  // Handle changes in the input field.
-  const handleChange = (e) => {
-    const query = e.target.value;
-    setSearchQuery(query);
-
-    // Debounce the API call to avoid too many requests.
-    if (debounceTimeout.current) {
-      clearTimeout(debounceTimeout.current);
-    }
-    debounceTimeout.current = setTimeout(() => {
-      fetchSearchResults(query);
-    }, 300);
-  };
-
-  // When a user selects a city, fetch its full details (including pollutant values)
-  // and update the global location store.
-  const handleSelectCity = async (city) => { // Handle city selection
-    try {
-      const detailedCityData = await getCityData(`@${city.uid}`);
-      console.log('Detailed City Data:', detailedCityData); // Log the detailed city data
-      setSelectedLocation(detailedCityData); // Update the selected location in the store
-
-
-      if (onSelectCity) {
-        onSelectCity(detailedCityData);
-      }
-
-      setSearchQuery(detailedCityData.station);
+      const response = await fetch(`/api/airqualityserver?city=${encodeURIComponent(term)}`);
+      const data = await response.json();
+      
+      // Store full station data
+      setSearchResults(data.data);
+      
+      // Extract unique city names
+      const uniqueCities = [...new Set(data.data.map(station => ({
+        name: station.city.name,
+        aqi: station.current?.aqi || station.aqi,
+        idx: station.idx
+      })))];
+      
+      setCities(uniqueCities);
+    } catch (error) {
+      console.error('Error searching cities:', error);
+      setCities([]);
       setSearchResults([]);
-      setShowDropdown(false);
-    } catch (err) {
-      setError('Error fetching detailed city data.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // Close the dropdown if the user clicks outside of it.
+  const handleCitySelect = (cityData) => {
+    const fullStationData = searchResults.find(station => station.idx === cityData.idx);
+    onCitySelect(fullStationData);
+    setSearchTerm(cityData.name);
+    setCities([]);
+  };
+
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
+    const debounce = setTimeout(() => {
+      searchCities(searchTerm);
+    }, 300);
+
+    return () => clearTimeout(debounce);
+  }, [searchTerm]);
 
   return (
-    <div className="flex items-center justify-center relative" ref={dropdownRef}>
-      <div className="relative w-full">
-        <input
-          type="text"
-          className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-          placeholder="Search city"
-          value={searchQuery}
-          onChange={handleChange}
-          required
-        />
-        {loading && (
-          <p className="text-sm text-gray-500 absolute right-2 top-2">
-            Loading...
-          </p>
-        )}
-      </div>
-
-      {error && <p className="text-red-500">{error}</p>}
-
-      {showDropdown && searchResults.length > 0 && (
-        <ul
-          className="absolute bg-white border border-gray-300 rounded-lg shadow-lg mt-2 w-full max-w-md max-h-60 overflow-y-auto z-10"
-          style={{ top: '100%' }}
-        >
-          {searchResults.map((result) => (
+    <div className="relative w-full max-w-md">
+      <input
+        type="text"
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        placeholder="Search for a city..."
+        className="w-full p-2 border rounded-lg"
+      />
+      
+      {isLoading && (
+        <div className="absolute right-2 top-2">
+          <div className="animate-spin h-5 w-5 border-2 border-gray-500 rounded-full border-t-transparent"></div>
+        </div>
+      )}
+      
+      {cities.length > 0 && (
+        <ul className="absolute w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto z-50">
+          {cities.map((city) => (
             <li
-              key={result.uid}
-              className="flex justify-between items-center p-2 hover:bg-gray-100 cursor-pointer"
-              onClick={() => handleSelectCity(result)}
+              key={city.idx}
+              onClick={() => handleCitySelect(city)}
+              className="p-3 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
             >
-              <div>
-                <p className="font-medium">{result.station.name}</p>
-                <p className="text-sm text-gray-500">
-                  {result.station.state}, {result.station.country}
-                </p>
+              <div className="flex justify-between items-center">
+                <span className="font-medium">{city.name}</span>
+                <span className={`px-2 py-1 rounded-full text-sm ${getAQIColorClass(city.aqi)}`}>
+                  AQI: {city.aqi || 'N/A'}
+                </span>
               </div>
-              <span className="badge bg-primary rounded-pill">{result.aqi}</span>
             </li>
           ))}
         </ul>
       )}
     </div>
   );
+}
+
+// Helper function to determine AQI color class
+function getAQIColorClass(aqi) {
+  if (!aqi) return 'bg-gray-100 text-gray-600';
+  if (aqi <= 50) return 'bg-green-100 text-green-800';
+  if (aqi <= 100) return 'bg-yellow-100 text-yellow-800';
+  if (aqi <= 150) return 'bg-orange-100 text-orange-800';
+  if (aqi <= 200) return 'bg-red-100 text-red-800';
+  if (aqi <= 300) return 'bg-purple-100 text-purple-800';
+  return 'bg-red-200 text-red-900';
 }
