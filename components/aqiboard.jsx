@@ -30,41 +30,51 @@ const PollutantCard = memo(({ name, value }) => (
 ));
 PollutantCard.displayName = 'PollutantCard';
 
-// Update ForecastCard to include chart
-const ForecastCard = memo(({ title, value, info, data }) => {
-  console.log(`Rendering ForecastCard for ${title}:`, data);
-  
+// Remove the ForecastCard component and keep only MainGraph component
+const MainGraph = memo(({ data, pollutants }) => {
+  const [selectedPollutant, setSelectedPollutant] = useState('aqi');
+
   return (
-    <div className="max-w-sm w-full bg-gray-800 rounded-lg shadow-sm p-4 md:p-6">
+    <div className="w-full bg-gray-800 rounded-lg shadow-sm p-4 md:p-6">
       <div className="flex justify-between mb-5">
-        <div>
-          <h5 className="inline-flex items-center text-gray-400 leading-none font-normal mb-2">
-            {title}
-            <span className="ml-2 text-xs text-gray-500">{info}</span>
-          </h5>
-          <p className="text-white text-2xl leading-none font-bold">{value}</p>
+        <div className="flex items-center gap-4">
+          <select 
+            className="bg-gray-700 text-gray-200 text-sm rounded-lg px-3 py-2 border border-gray-600"
+            value={selectedPollutant}
+            onChange={(e) => setSelectedPollutant(e.target.value)}
+          >
+            {pollutants.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.title}
+              </option>
+            ))}
+          </select>
+          <span className="text-gray-400">
+            {pollutants.find(p => p.key === selectedPollutant)?.info}
+          </span>
         </div>
       </div>
-      <div className="h-[200px]">
-        {data && data.length > 0 ? (
+      <div className="h-[400px]"> {/* Increased height for better visibility */}
+        {data && data[selectedPollutant] && data[selectedPollutant].length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
+            <LineChart data={data[selectedPollutant]}>
               <XAxis 
                 dataKey="time" 
                 stroke="#9CA3AF"
                 angle={-45}
                 textAnchor="end"
                 height={60}
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 12 }}
               />
               <YAxis 
                 stroke="#9CA3AF"
                 domain={['auto', 'auto']}
+                tick={{ fontSize: 12 }}
               />
               <Tooltip 
                 contentStyle={{ background: '#374151', border: 'none' }}
                 labelStyle={{ color: '#9CA3AF' }}
-                formatter={(value) => [`${value}`, title]}
+                formatter={(value) => [`${value}`, selectedPollutant.toUpperCase()]}
               />
               <Line 
                 type="monotone" 
@@ -245,7 +255,7 @@ export default function AQIBoard({ locationData }) {
             {aqiData && (
               <div className="mt-6 space-y-6">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-semibold text-white">Forecast Data</h3>
+                  <h3 className="text-lg font-semibold text-white">Historical Data</h3>
                   <select 
                     className="bg-gray-800 text-white border border-gray-600 rounded-lg px-3 py-2"
                     onChange={(e) => setTimeRange(e.target.value)}
@@ -257,17 +267,10 @@ export default function AQIBoard({ locationData }) {
                   </select>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {forecastCards.map((card) => (
-                    <ForecastCard
-                      key={card.key}
-                      title={card.title}
-                      value={aqiData.current?.[card.key]?.v || aqiData[card.key] || 'N/A'}
-                      info={card.info}
-                      data={forecastData[card.key] || []}
-                    />
-                  ))}
-                </div>
+                <MainGraph 
+                  data={forecastData}
+                  pollutants={forecastCards}
+                />
               </div>
             )}
           </div>
