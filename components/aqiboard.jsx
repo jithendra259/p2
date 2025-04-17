@@ -31,8 +31,19 @@ const PollutantCard = memo(({ name, value }) => (
 PollutantCard.displayName = 'PollutantCard';
 
 // Remove the ForecastCard component and keep only MainGraph component
-const MainGraph = memo(({ data, pollutants }) => {
+const MainGraph = memo(({ data, pollutants, timeRange }) => { // Add timeRange prop
   const [selectedPollutant, setSelectedPollutant] = useState('aqi');
+
+  // Calculate X-axis props based on time range
+  const xAxisProps = useMemo(() => {
+    const isLongRange = Number(timeRange) >= 168; // 7 days or more
+    return {
+      angle: isLongRange ? -45 : -45,
+      height: isLongRange ? 60 : 60,
+      interval: isLongRange ? 'preserveStartEnd' : 'preserveStartEnd',
+      tick: { fontSize: 12 }
+    };
+  }, [timeRange]);
 
   return (
     <div className="w-full bg-gray-800 rounded-lg shadow-sm p-4 md:p-6">
@@ -61,10 +72,8 @@ const MainGraph = memo(({ data, pollutants }) => {
               <XAxis 
                 dataKey="time" 
                 stroke="#9CA3AF"
-                angle={-45}
+                {...xAxisProps}
                 textAnchor="end"
-                height={60}
-                tick={{ fontSize: 12 }}
               />
               <YAxis 
                 stroke="#9CA3AF"
@@ -107,6 +116,9 @@ export default function AQIBoard({ locationData }) {
   const processGroupedReadingsData = useCallback((readings) => {
     if (!Array.isArray(readings)) return {};
 
+    const cutoffTime = new Date();
+    cutoffTime.setHours(cutoffTime.getHours() - Number(timeRange));
+
     const pollutantMap = {
       aqi: [],
       pm25: [],
@@ -117,13 +129,16 @@ export default function AQIBoard({ locationData }) {
       co: []
     };
 
-    // Sort readings by time first
-    const sortedReadings = [...readings].sort((a, b) => 
-      new Date(a.time.s) - new Date(b.time.s)
-    );
+    const sortedReadings = [...readings]
+      .filter(reading => new Date(reading.time.s) >= cutoffTime)
+      .sort((a, b) => new Date(a.time.s) - new Date(b.time.s));
 
     sortedReadings.forEach(reading => {
-      const time = new Date(reading.time.s).toLocaleString();
+      // Format time based on selected range
+      const date = new Date(reading.time.s);
+      const time = Number(timeRange) >= 168 
+        ? date.toLocaleDateString() // Show only date for 7+ days
+        : date.toLocaleString();    // Show date and time for 24/48 hours
       
       // Handle AQI
       pollutantMap.aqi.push({
@@ -142,9 +157,8 @@ export default function AQIBoard({ locationData }) {
       });
     });
 
-    console.log('Processed forecast data:', pollutantMap);
     return pollutantMap;
-  }, []);
+  }, [timeRange]);
 
   // Process data when locationData changes
   useEffect(() => {
@@ -261,6 +275,7 @@ export default function AQIBoard({ locationData }) {
                     onChange={(e) => setTimeRange(e.target.value)}
                     value={timeRange}
                   >
+                    <option value="24">Last 24 hours</option>
                     <option value="48">Last 48 hours</option>
                     <option value="168">Last 7 days</option>
                     <option value="720">Last 30 days</option>
@@ -270,6 +285,7 @@ export default function AQIBoard({ locationData }) {
                 <MainGraph 
                   data={forecastData}
                   pollutants={forecastCards}
+                  timeRange={timeRange} // Pass timeRange prop
                 />
               </div>
             )}
