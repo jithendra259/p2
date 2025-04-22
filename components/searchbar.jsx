@@ -1,57 +1,161 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 export default function SearchBar({ onCitySelect = () => {} }) {
   const [cities, setCities] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
+  const searchCache = useRef(new Map());
+  const abortController = useRef(null);
 
-  const searchCities = async (term) => {
-    if (!term) {
+  const searchCities = useCallback(async (term) => {
+    if (!term || term.length < 2) {
       setCities([]);
       setSearchResults([]);
       return;
     }
+
+    // Check cache first
+    const cacheKey = term.toLowerCase();
+    if (searchCache.current.has(cacheKey)) {
+      const cachedResults = searchCache.current.get(cacheKey);
+      setCities(cachedResults.cities);
+      setSearchResults(cachedResults.searchResults);
+      return;
+    }
+
     setIsLoading(true);
+
+    // Cancel previous request if any
+    if (abortController.current) {
+      abortController.current.abort();
+    }
+    abortController.current = new AbortController();
+
     try {
-      const response = await fetch(`/api/airqualityserver?city=${encodeURIComponent(term)}`);
+      const response = await fetch(
+        `/api/airqualityserver?city=${encodeURIComponent(term)}`, 
+        { signal: abortController.current.signal }
+      );
       const data = await response.json();
       
-      // Store full station data
-      setSearchResults(data.data);
-      
-      // Extract unique city names
-      const uniqueCities = [...new Set(data.data.map(station => ({
-        name: station.city.name,
-        aqi: station.current?.aqi || station.aqi,
-        idx: station.idx
-      })))];
-      
+      // Process and filter results
+      const filteredData = data.data.filter(station => 
+        station.city?.name?.toLowerCase().includes(term.toLowerCase())
+      );
+
+      // Extract unique cities with more efficient method
+      const uniqueCities = Object.values(
+        filteredData.reduce((acc, station) => {
+          const key = station.idx;
+          if (!acc[key]) {
+            acc[key] = {
+              name: station.city.name,
+              aqi: station.current?.aqi || station.aqi,
+              idx: station.idx,
+              country: station.country || ''
+            };
+          }
+          return acc;
+        }, {})
+      );
+
+      // Sort by relevance
+      uniqueCities.sort((a, b) => {
+        const aStart = a.name.toLowerCase().startsWith(term.toLowerCase());
+        const bStart = b.name.toLowerCase().startsWith(term.toLowerCase());
+        if (aStart && !bStart) return -1;
+        if (!aStart && bStart) return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      // Cache the results
+      searchCache.current.set(cacheKey, {
+        cities: uniqueCities,
+        searchResults: filteredData
+      });
+
       setCities(uniqueCities);
+      setSearchResults(filteredData);
+
     } catch (error) {
-      console.error('Error searching cities:', error);
-      setCities([]);
-      setSearchResults([]);
+      if (error.name !== 'AbortError') {
+        console.error('Error searching cities:', error);
+        setCities([]);
+        setSearchResults([]);
+      }
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  const handleCitySelect = async (cityData) => {
+    try {
+      // First update the backend
+      await updateBackendIdx(cityData.idx);
+      
+      // Then update the UI
+      const fullStationData = searchResults.find(station => station.idx === cityData.idx);
+      onCitySelect(fullStationData);
+      setSearchTerm(cityData.name);
+      setCities([]);
+      
+      // Store the selected idx in localStorage for persistence
+      localStorage.setItem('selectedIdx', cityData.idx);
+      
+    } catch (error) {
+      console.error('Error handling city selection:', error);
+      // You might want to show an error message to the user here
+    }
   };
 
-  const handleCitySelect = (cityData) => {
-    const fullStationData = searchResults.find(station => station.idx === cityData.idx);
-    onCitySelect(fullStationData);
-    setSearchTerm(cityData.name);
-    setCities([]);
+  const updateBackendIdx = async (idx) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/current-idx', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ idx })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update backend idx');
+      }
+
+      const data = await response.json();
+      console.log('Backend updated with idx:', data);
+      return true;
+    } catch (error) {
+      console.error('Error updating backend:', error);
+      return false;
+    }
   };
 
+  // Optimized debounce with shorter delay for longer terms
   useEffect(() => {
-    const debounce = setTimeout(() => {
+    const debounceTime = searchTerm.length > 3 ? 150 : 300;
+    const timeoutId = setTimeout(() => {
       searchCities(searchTerm);
-    }, 300);
+    }, debounceTime);
 
-    return () => clearTimeout(debounce);
-  }, [searchTerm]);
+    return () => {
+      clearTimeout(timeoutId);
+      if (abortController.current) {
+        abortController.current.abort();
+      }
+    };
+  }, [searchTerm, searchCities]);
+
+  // Clear cache periodically to prevent memory buildup
+  useEffect(() => {
+    const cacheCleanupInterval = setInterval(() => {
+      searchCache.current.clear();
+    }, 5 * 60 * 1000); // Clear cache every 5 minutes
+
+    return () => clearInterval(cacheCleanupInterval);
+  }, []);
 
   return (
     <div className="relative w-full max-w-md">

@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useMemo, memo, useCallback } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import ForecastGraph from './forecastgraph';
+import { useConnection } from '../hooks/useConnection';
 
 // Default location
 const DEFAULT_LOCATION = {
@@ -10,6 +12,17 @@ const DEFAULT_LOCATION = {
   country: "India",
   aqi: typeof window !== "undefined" ? localStorage.getItem("aqi") || 0 : 0,
 };
+
+// Add this after your existing constants
+const POLLUTANTS = [
+  { key: 'aqi', title: 'AQI', info: 'Air Quality Index' },
+  { key: 'pm25', title: 'PM2.5', info: 'Particulate Matter < 2.5μm' },
+  { key: 'pm10', title: 'PM10', info: 'Particulate Matter < 10μm' },
+  { key: 'co', title: 'CO', info: 'Carbon Monoxide' },
+  { key: 'so2', title: 'SO2', info: 'Sulfur Dioxide' },
+  { key: 'o3', title: 'O3', info: 'Ozone' },
+  { key: 'no2', title: 'NO2', info: 'Nitrogen Dioxide' }
+];
 
 // Memoized components for better performance
 const LoadingSpinner = memo(() => (
@@ -222,6 +235,41 @@ export default function AQIBoard({ locationData }) {
     { title: 'CO', key: 'co', info: 'Carbon monoxide' },
   ], []);
 
+  const processedData = useMemo(() => {
+    if (!aqiData) return null;
+    
+    return {
+        aqi: aqiData.readings.map(r => ({
+            time: new Date(r.time?.s || r.timestamp).toLocaleString(),
+            value: r.aqi
+        })),
+        pm25: aqiData.readings.map(r => ({
+            time: new Date(r.time?.s || r.timestamp).toLocaleString(),
+            value: r.iaqi?.pm25?.v || 0
+        })),
+        pm10: aqiData.readings.map(r => ({
+            time: new Date(r.time?.s || r.timestamp).toLocaleString(),
+            value: r.iaqi?.pm10?.v || 0
+        })),
+        co: aqiData.readings.map(r => ({
+            time: new Date(r.time?.s || r.timestamp).toLocaleString(),
+            value: r.iaqi?.co?.v || 0
+        })),
+        so2: aqiData.readings.map(r => ({
+            time: new Date(r.time?.s || r.timestamp).toLocaleString(),
+            value: r.iaqi?.so2?.v || 0
+        })),
+        o3: aqiData.readings.map(r => ({
+            time: new Date(r.time?.s || r.timestamp).toLocaleString(),
+            value: r.iaqi?.o3?.v || 0
+        })),
+        no2: aqiData.readings.map(r => ({
+            time: new Date(r.time?.s || r.timestamp).toLocaleString(),
+            value: r.iaqi?.no2?.v || 0
+        }))
+    };
+}, [aqiData]);
+
   return (
     <div className="min-h-screen bg-[#303030] p-6 pt-20"> {/* Changed background and added min-height */}
       <div className="max-w-4xl mx-auto">
@@ -292,6 +340,44 @@ export default function AQIBoard({ locationData }) {
           </div>
         )}
       </div>
+      {/* Connection status and other components */}
+      
+      {/* Time range selector */}
+      <div className="mb-6">
+        <select
+          className="bg-gray-700 text-gray-200 text-sm rounded-lg px-3 py-2 border border-gray-600"
+          value={timeRange}
+          onChange={(e) => setTimeRange(e.target.value)}
+        >
+          <option value="24">Last 24 Hours</option>
+          <option value="48">Last 48 Hours</option>
+          <option value="72">Last 72 Hours</option>
+          <option value="168">Last Week</option>
+        </select>
+      </div>
+
+      {/* Loading state */}
+      {loading && <LoadingSpinner />}
+
+      {/* Error state */}
+      {error && (
+        <div className="text-red-500 mb-4">
+          {error}
+        </div>
+      )}
+
+      {/* Forecast Graph */}
+      {!loading && !error && processedData && (
+        <div className="mb-8">
+          <ForecastGraph
+            data={processedData}
+            pollutants={POLLUTANTS}
+            timeRange={timeRange}
+          />
+        </div>
+      )}
+
+      {/* ...rest of your existing JSX... */}
     </div>
   );
 }
